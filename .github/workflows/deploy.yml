@@ -40,7 +40,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=standup-picker/terraform.tfstate" \
+            -backend-config="key=sortes-picker/terraform.tfstate" \
             -backend-config="region=${{ secrets.AWS_REGION }}"
         working-directory: ./terraform
 
