@@ -83,6 +83,13 @@ resource "aws_lambda_permission" "allow_public_function_url" {
   function_url_auth_type = "NONE"
 }
 
+resource "aws_lambda_permission" "allow_public_function_invoke" {
+  statement_id  = "FunctionURLAllowPublicInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.sortes_picker.function_name
+  principal     = "*"
+}
+
 # 5. Scheduled Daily Pick Rule (09:00 UTC, Mon-Fri)
 resource "aws_cloudwatch_event_rule" "daily_pick" {
   name                = "sortes-picker-daily"
