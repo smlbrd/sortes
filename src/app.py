@@ -70,9 +70,25 @@ def handle_spin_again(ack, body, client):
     channel_id = body["channel"]["id"]
     message_ts = body["message"]["ts"]
 
+    # 1. Strike through the previous pick and remove the button
     client.chat_update(
         channel=channel_id,
         ts=message_ts,
+        text=f"~Today's pick is <@{previous_user}>!~",
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"~🎯 Today's pick is *<@{previous_user}>*~"
+                }
+            }
+        ]
+    )
+
+    # 2. Post the fresh pick as a new message
+    client.chat_postMessage(
+        channel=channel_id,
         text=f"Today's pick is <@{next_user}>!",
         blocks=build_picker_blocks(next_user)
     )
