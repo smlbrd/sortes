@@ -3,6 +3,8 @@ name: Deploy Standup Picker
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
 
 permissions:
   id-token: write
