@@ -122,7 +122,7 @@ def handle_volunteer(ack, body, client):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"~🎯 Today's pick is *<@{previous_user}>*~"
+                    "text": f"🎯 ~Today's pick is *<@{previous_user}>*~"
                 }
             }
         ]
