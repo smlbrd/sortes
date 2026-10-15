@@ -43,6 +43,16 @@ def build_picker_blocks(user_id):
                     },
                     "action_id": "spin_again",
                     "value": user_id
+                },
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "I Volunteer 🙋",
+                        "emoji": True
+                    },
+                    "action_id": "volunteer",
+                    "value": user_id
                 }
             ]
         }
@@ -91,6 +101,38 @@ def handle_spin_again(ack, body, client):
         channel=channel_id,
         text=f"Today's pick is <@{next_user}>!",
         blocks=build_picker_blocks(next_user)
+    )
+
+@app.action("volunteer")
+def handle_volunteer(ack, body, client):
+    ack()
+    volunteer_user = body["user"]["id"]
+    previous_user = body.get("actions", [{}])[0].get("value")
+
+    channel_id = body["channel"]["id"]
+    message_ts = body["message"]["ts"]
+
+    # 1. Strike through the previous message
+    client.chat_update(
+        channel=channel_id,
+        ts=message_ts,
+        text=f"~Today's pick is <@{previous_user}>!~",
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"~🎯 Today's pick is *<@{previous_user}>*~"
+                }
+            }
+        ]
+    )
+
+    # 2. Announce the volunteer
+    client.chat_postMessage(
+        channel=channel_id,
+        text=f"🎯 <@{volunteer_user}> bravely volunteered!",
+        blocks=build_picker_blocks(volunteer_user)
     )
 
 def lambda_handler(event, context):
