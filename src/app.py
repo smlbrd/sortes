@@ -19,7 +19,6 @@ app = App(
 register_handlers(app)
 slack_handler = SlackRequestHandler(app=app)
 
-
 def lambda_handler(event, context):
     # Route scheduled AWS EventBridge / CloudWatch cron triggers
     if event.get("source") in ["aws.events", "aws.scheduler"]:

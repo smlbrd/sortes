@@ -84,7 +84,6 @@ def build_pool_modal(channel_id: str, pool_name: str, current_members: list[str]
         }
     ]
 
-    # Add delete button at the bottom when editing an existing pool
     if not is_new:
         blocks.extend([
             {"type": "divider"},
@@ -111,4 +110,128 @@ def build_pool_modal(channel_id: str, pool_name: str, current_members: list[str]
             "is_new": is_new
         }),
         "title": {"type": "plain_text", "text": title_text[:24]},
-        "submit": {"type": "plain_text", "text":
+        "submit": {"type": "plain_text", "text": submit_text[:24]},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks
+    }
+
+
+def build_delete_confirm_modal(channel_id: str, pool_name: str) -> dict:
+    return {
+        "type": "modal",
+        "callback_id": "confirm_delete_pool_modal",
+        "private_metadata": json.dumps({
+            "channel_id": channel_id,
+            "pool_name": pool_name
+        }),
+        "title": {"type": "plain_text", "text": "Delete Pool"[:24]},
+        "submit": {"type": "plain_text", "text": "Yes, Delete"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"⚠️ Are you sure you want to permanently delete the *{pool_name}* pool? All pick counts and weight history will be lost."
+                }
+            }
+        ]
+    }
+
+
+def build_all_pools_overview_blocks(pools: dict) -> list[dict]:
+    if not pools:
+        return [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "ℹ️ No pools configured for this channel yet. Use `/create <pool_name>` to make one."
+                }
+            }
+        ]
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Channel Pools Overview", "emoji": True}
+        },
+        {"type": "divider"}
+    ]
+
+    for name, data in sorted(pools.items()):
+        member_count = len(data.get("tickets", {}))
+        total_picks = sum(data.get("picks_count", {}).values())
+        last_picked = data.get("last_picked")
+        last_picked_str = f"<@{last_picked}>" if last_picked else "None"
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"*{name}*\n"
+                    f"• Members: `{member_count}`\n"
+                    f"• Total Picks: `{total_picks}`\n"
+                    f"• Last Picked: {last_picked_str}"
+                )
+            }
+        })
+
+    blocks.append({
+        "type": "context",
+        "elements": [
+            {"type": "mrkdwn", "text": "💡 Run `/stats <pool_name>` for individual ticket weights and member leaderboards."}
+        ]
+    })
+    return blocks
+
+
+def build_pool_leaderboard_blocks(
+    pool_name: str,
+    tickets: dict[str, int],
+    picks_count: dict[str, int],
+    last_picked: str | None
+) -> list[dict]:
+    blocks = [
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"Stats: {pool_name}", "emoji": True}
+        }
+    ]
+
+    last_str = f"<@{last_picked}>" if last_picked else "None"
+    blocks.append({
+        "type": "context",
+        "elements": [
+            {"type": "mrkdwn", "text": f"Last selected: *{last_str}*"}
+        ]
+    })
+    blocks.append({"type": "divider"})
+
+    if not tickets:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "_No members registered in this pool._"}
+        })
+        return blocks
+
+    # Sort users primarily by picks count (descending), then ticket weight
+    sorted_users = sorted(
+        tickets.keys(),
+        key=lambda u: (picks_count.get(u, 0), tickets.get(u, 1)),
+        reverse=True
+    )
+
+    lines = []
+    for rank, uid in enumerate(sorted_users, start=1):
+        picks = picks_count.get(uid, 0)
+        weight = tickets.get(uid, 1)
+        lines.append(f"`{rank}.` <@{uid}> — *{picks}* picks (Current tickets: `{weight}`)")
+
+    blocks.append({
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": "\n".join(lines)}
+    })
+
+    return blocks
