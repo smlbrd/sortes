@@ -60,7 +60,7 @@ def build_pool_modal(channel_id: str, pool_name: str, current_members: list[str]
     valid_slack_ids = list(dict.fromkeys([
         uid.strip()
         for uid in current_members
-        if uid and re.match(r"^[UW][A-Z0-9]+\$", uid.strip(), re.IGNORECASE)
+        if uid and re.match(r"^[UW][A-Z0-9]+$", uid.strip(), re.IGNORECASE)
     ]))
 
     user_select_element = {
