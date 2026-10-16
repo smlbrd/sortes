@@ -90,23 +90,50 @@ resource "aws_lambda_permission" "allow_public_function_invoke" {
   principal     = "*"
 }
 
-# 5. Scheduled Daily Pick Rule (09:00 UTC, Mon-Fri)
-resource "aws_cloudwatch_event_rule" "daily_pick" {
-  name                = "sortes-picker-daily"
-  description         = "Trigger daily pick on weekdays"
-  schedule_expression = "cron(0 9 ? * MON-FRI *)"
+# 5. Execution Role & Policy for EventBridge Scheduler
+resource "aws_iam_role" "scheduler_exec" {
+  name = "sortes_picker_scheduler_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "scheduler.amazonaws.com"
+      }
+    }]
+  })
 }
 
-resource "aws_cloudwatch_event_target" "lambda_target" {
-  rule      = aws_cloudwatch_event_rule.daily_pick.name
-  target_id = "SortesPickerDailyTrigger"
-  arn       = aws_lambda_function.sortes_picker.arn
+resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
+  name = "sortes_picker_scheduler_invoke"
+  role = aws_iam_role.scheduler_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = aws_lambda_function.sortes_picker.arn
+    }]
+  })
 }
 
-resource "aws_lambda_permission" "allow_eventbridge" {
-  statement_id  = "AllowExecutionFromEventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.sortes_picker.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.daily_pick.arn
+# 6. Scheduled Daily Pick Rule (Europe/London time, Mon-Fri)
+resource "aws_scheduler_schedule" "daily_pick" {
+  name        = "sortes-picker-daily"
+  description = "Trigger daily pick on weekdays at 09:00 UK time"
+
+  schedule_expression          = "cron(30 9 ? * MON-FRI *)"
+  schedule_expression_timezone = "Europe/London"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.sortes_picker.arn
+    role_arn = aws_iam_role.scheduler_exec.arn
+  }
 }
