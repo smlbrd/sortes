@@ -65,6 +65,7 @@ resource "aws_lambda_function" "sortes_picker" {
       SLACK_SIGNING_SECRET = var.slack_signing_secret
       SLACK_CHANNEL_ID     = var.slack_channel_id
       USER_POOL            = var.user_pool
+      DYNAMODB_TABLE       = aws_dynamodb_table.picker_pools.name
     }
   }
 }
@@ -94,7 +95,7 @@ resource "aws_lambda_permission" "allow_public_function_invoke" {
 resource "aws_cloudwatch_event_rule" "daily_pick" {
   name                = "sortes-picker-daily"
   description         = "Trigger daily pick on weekdays"
-  schedule_expression = "cron(45 8 ? * MON-FRI *)"
+  schedule_expression = "cron(30 9 ? * MON-FRI *)"
 }
 
 resource "aws_cloudwatch_event_target" "lambda_target" {
@@ -109,4 +110,41 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   function_name = aws_lambda_function.sortes_picker.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.daily_pick.arn
+}
+
+# 6. DynamoDB Table for Storing Channel Pools
+resource "aws_dynamodb_table" "picker_pools" {
+  name         = "slack-picker-pools"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "channel_id"
+
+  attribute {
+    name = "channel_id"
+    type = "S"
+  }
+}
+
+# 7. DynamoDB IAM Access Policy for Lambda
+resource "aws_iam_policy" "lambda_dynamodb" {
+  name        = "sortes_picker_dynamodb_policy"
+  description = "Allows Lambda to read and update Slack user pools"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem"
+        ]
+        Resource = aws_dynamodb_table.picker_pools.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_dynamodb" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = aws_iam_policy.lambda_dynamodb.arn
 }
