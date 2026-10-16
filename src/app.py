@@ -1,3 +1,9 @@
+import os
+import sys
+
+# Ensure Python looks in the directory containing app.py for modules
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from slack_bolt import App
 from slack_bolt.adapter.aws_lambda import SlackRequestHandler
 
