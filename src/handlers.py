@@ -251,6 +251,15 @@ def register_handlers(app):
         pool_name = payload.get("pool", "default")
         previous_user = payload.get("user")
 
+        # Guard: Prevent current pick from volunteering for themselves
+                if volunteer_user == previous_user:
+                    client.chat_postEphemeral(
+                        channel=channel_id,
+                        user=volunteer_user,
+                        text="😅 You're already today's pick! No need to volunteer."
+                    )
+                    return
+
         picker.refund_skipped_user(channel_id, pool_name, previous_user)
         picker.select_and_update_pool(
             channel_id=channel_id,
