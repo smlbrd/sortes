@@ -84,23 +84,6 @@ def build_pool_modal(channel_id: str, pool_name: str, current_members: list[str]
         }
     ]
 
-    if not is_new:
-        blocks.extend([
-            {"type": "divider"},
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "🗑️ Delete Pool", "emoji": True},
-                        "style": "danger",
-                        "action_id": "initiate_delete_pool_from_modal",
-                        "value": json.dumps({"channel_id": channel_id, "pool_name": pool_name})
-                    }
-                ]
-            }
-        ])
-
     return {
         "type": "modal",
         "callback_id": "save_pool_modal",
