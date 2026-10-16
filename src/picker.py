@@ -1,7 +1,7 @@
 import random
 
 # ---------------------------------------------------------------------------
-# Pure Domain Logic (No AWS, no Slack, standard library only)
+# Pure Algorithm (Zero dependencies - runs cleanly in simulate.py)
 # ---------------------------------------------------------------------------
 
 def compute_weighted_pick(
@@ -11,7 +11,7 @@ def compute_weighted_pick(
     explicit_user: str | None = None
 ) -> tuple[str, dict[str, int]]:
     """
-    Pure function: calculates the winner and new ticket balances.
+    Pure selection logic: calculates winner and returns updated ticket weights.
     Returns: (chosen_user_id, updated_tickets_dict)
     """
     if not tickets:
@@ -19,24 +19,23 @@ def compute_weighted_pick(
 
     updated = dict(tickets)
 
-    # Hard recency filter: exclude last_picked and rerolled user
+    # Disallow back-to-back picks and excluded (rerolled) users
     disallowed = {u for u in [last_picked, exclude_user] if u}
     candidates = [u for u in updated if u not in disallowed]
 
-    # Fallbacks for small pools (<= 2 members)
+    # Fallback if pool is small (<= 2 members)
     if not candidates:
         candidates = [u for u in updated if u != exclude_user]
     if not candidates:
         candidates = list(updated.keys())
 
-    # Selection
     if explicit_user:
         chosen = explicit_user
     else:
         weights = [updated[u] for u in candidates]
         chosen = random.choices(candidates, weights=weights, k=1)[0]
 
-    # Update weights
+    # Update tickets: winner drops to 1, others gain +1
     for user_id in updated:
         if user_id == chosen:
             updated[user_id] = 1
@@ -47,11 +46,12 @@ def compute_weighted_pick(
 
 
 # ---------------------------------------------------------------------------
-# I/O Orchestration (DynamoDB-backed)
+# I/O Orchestration (DynamoDB-dependent functions)
 # ---------------------------------------------------------------------------
 
 def select_and_update_pool(
     channel_id: str | None = None,
+    pool_name: str = "default",
     exclude_user: str | None = None,
     explicit_user: str | None = None
 ) -> str:
@@ -59,7 +59,10 @@ def select_and_update_pool(
     import db
 
     target_channel = channel_id or config.DEFAULT_CHANNEL_ID
-    tickets, last_picked = db.get_channel_state(target_channel)
+    tickets, picks_count, last_picked = db.get_pool_data(target_channel, pool_name)
+
+    if not tickets:
+        return "unknown"
 
     chosen, new_tickets = compute_weighted_pick(
         tickets=tickets,
@@ -68,30 +71,42 @@ def select_and_update_pool(
         explicit_user=explicit_user
     )
 
-    db.save_channel_state(target_channel, new_tickets, last_picked=chosen)
+    picks_count[chosen] = picks_count.get(chosen, 0) + 1
+    db.save_pool_data(target_channel, pool_name, new_tickets, picks_count, last_picked=chosen)
     return chosen
 
 
-def refund_skipped_user(channel_id: str, user_id: str) -> None:
+def refund_skipped_user(channel_id: str, pool_name: str, user_id: str) -> None:
     import db
-    tickets, last_picked = db.get_channel_state(channel_id)
+
+    tickets, picks_count, last_picked = db.get_pool_data(channel_id, pool_name)
+
     if user_id in tickets:
         tickets[user_id] = max(tickets.values(), default=1)
-        db.save_channel_state(channel_id, tickets, last_picked)
+
+    if user_id in picks_count and picks_count[user_id] > 0:
+        picks_count[user_id] -= 1
+
+    db.save_pool_data(channel_id, pool_name, tickets, picks_count, last_picked)
 
 
-def sync_pool_members(channel_id: str, selected_users: list[str]) -> int:
+def sync_pool_members(channel_id: str, pool_name: str, selected_users: list[str]) -> int:
     import db
-    old_tickets, last_picked = db.get_channel_state(channel_id)
+
+    old_tickets, old_picks, last_picked = db.get_pool_data(channel_id, pool_name)
     avg_tickets = (sum(old_tickets.values()) // len(old_tickets)) if old_tickets else 1
 
     updated_tickets = {
         uid: old_tickets.get(uid, max(1, avg_tickets))
         for uid in selected_users
     }
+    updated_picks = {
+        uid: old_picks.get(uid, 0)
+        for uid in selected_users
+    }
 
     if last_picked not in updated_tickets:
         last_picked = None
 
-    db.save_channel_state(channel_id, updated_tickets, last_picked)
+    db.save_pool_data(channel_id, pool_name, updated_tickets, updated_picks, last_picked)
     return len(updated_tickets)

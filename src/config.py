@@ -1,5 +1,4 @@
 import os
-import boto3
 
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
@@ -11,9 +10,12 @@ FALLBACK_USER_POOL = [
     if uid.strip()
 ]
 
-# Only initialize DynamoDB table if AWS credentials / boto3 are present
+# Gracefully handle missing boto3 outside of AWS environments
 try:
+    import boto3
     dynamodb = boto3.resource("dynamodb")
     pool_table = dynamodb.Table(DYNAMODB_TABLE_NAME)
 except Exception:
+    boto3 = None
+    dynamodb = None
     pool_table = None
