@@ -27,17 +27,21 @@ data "archive_file" "lambda_zip" {
   output_path = "${path.module}/lambda.zip"
 }
 
-# 2. Execution Role for Lambda
+# 2. Execution Role for Lambda (Shared with EventBridge Scheduler)
 resource "aws_iam_role" "lambda_exec" {
   name = "sortes_picker_lambda_role"
 
+  # Allows both Lambda and Scheduler to assume this role
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Action = "sts:AssumeRole"
       Effect = "Allow"
       Principal = {
-        Service = "lambda.amazonaws.com"
+        Service = [
+          "lambda.amazonaws.com",
+          "scheduler.amazonaws.com"
+        ]
       }
     }]
   })
@@ -46,6 +50,21 @@ resource "aws_iam_role" "lambda_exec" {
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.lambda_exec.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# Allows the Scheduler to invoke the Lambda function using this role
+resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
+  name = "sortes_picker_scheduler_invoke"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "lambda:InvokeFunction"
+      Resource = aws_lambda_function.sortes_picker.arn
+    }]
+  })
 }
 
 # 3. Lambda Function
@@ -90,42 +109,12 @@ resource "aws_lambda_permission" "allow_public_function_invoke" {
   principal     = "*"
 }
 
-# 5. Execution Role & Policy for EventBridge Scheduler
-resource "aws_iam_role" "scheduler_exec" {
-  name = "sortes_picker_scheduler_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "scheduler.amazonaws.com"
-      }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "scheduler_invoke_lambda" {
-  name = "sortes_picker_scheduler_invoke"
-  role = aws_iam_role.scheduler_exec.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = aws_lambda_function.sortes_picker.arn
-    }]
-  })
-}
-
-# 6. Scheduled Daily Pick Rule (Europe/London time, Mon-Fri)
+# 5. Scheduled Daily Pick Rule (Europe/London time, Mon-Fri)
 resource "aws_scheduler_schedule" "daily_pick" {
   name        = "sortes-picker-daily"
   description = "Trigger daily pick on weekdays at 09:00 UK time"
 
-  schedule_expression          = "cron(30 9 ? * MON-FRI *)"
+  schedule_expression          = "cron(45 9 ? * MON-FRI *)"
   schedule_expression_timezone = "Europe/London"
 
   flexible_time_window {
@@ -134,6 +123,6 @@ resource "aws_scheduler_schedule" "daily_pick" {
 
   target {
     arn      = aws_lambda_function.sortes_picker.arn
-    role_arn = aws_iam_role.scheduler_exec.arn
+    role_arn = aws_iam_role.lambda_exec.arn
   }
 }
